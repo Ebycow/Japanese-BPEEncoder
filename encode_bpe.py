@@ -48,6 +48,7 @@ class BPEEncoder_ja:
             end = min(len(text), pos+self.maxlen+1) if text[pos]=='<' else pos+2
             for e in range(end, pos, -1):
                 wd = text[pos:e]
+                print(wd)
                 if wd in self.bpe:
                     result.append(self.bpe.index(wd))
                     pos = e
@@ -96,8 +97,6 @@ if __name__=='__main__':
     import pickle
     from multiprocessing import Pool
     parser = argparse.ArgumentParser()
-    parser.add_argument("--src_dir", help="source dir", required=True )
-    parser.add_argument("--dst_file", help="destnation file", required=True )
     parser.add_argument("--num_process", help="process num", type=int, default=8 )
     parser.add_argument("--combine", help="Concatenate files with <|endoftext|> separator into chunks of this minimum size", type=int, default=50000 )
     args = parser.parse_args()
@@ -110,37 +109,16 @@ if __name__=='__main__':
 
     token_chunks = []
     array_file = []
-    def _proc(i):
-        raw_text = ''
-        for j, (curDir, dirs, files) in enumerate(array_file):
-            if not (j % args.num_process == i):
-                continue
-            print('append #',curDir)
-            for file in tqdm(files):
-                if file.endswith(".txt"):
-                    input = os.path.join(curDir, file)
-                    with open(input, 'r', encoding='utf-8') as fp:
-                        raw_text += fp.read()
-                    raw_text += '<|endoftext|>'
-                    if len(raw_text) >= args.combine:
-                        tokens = np.stack(enc.encode(raw_text))
-                        token_chunks.append(tokens)
-                        raw_text = ''
-            if raw_text and len(raw_text) > 0:
-                tokens = np.stack(enc.encode(raw_text))
-                token_chunks.append(tokens)
-        with open('tmp%d.pkl'%i, 'wb') as f:
-            pickle.dump(token_chunks, f)
 
-    for curDir, dirs, files in os.walk(args.src_dir):
-        array_file.append((curDir, dirs, files))
+    raw_text = ''
 
-    with Pool(args.num_process) as p:
-        p.map(_proc, list(range(args.num_process)))
+    with open("./dataset/dataset.txt", 'r', encoding='utf-8') as fp:
+        raw_text += fp.read()
+    raw_text += '<|endoftext|>'
+    print(raw_text)
+    tokens = np.stack(enc.encode(raw_text))
+    token_chunks.append(tokens)
 
-    token_chunks = []
-    for i in range(args.num_process):
-        with open('tmp%d.pkl'%i, 'rb') as f:
-            token_chunks.extend(pickle.load(f))
+    np.savez_compressed("./finetune", *token_chunks)
 
-    np.savez_compressed(args.dst_file, *token_chunks)
+    print()
